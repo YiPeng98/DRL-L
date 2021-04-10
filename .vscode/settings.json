@@ -1,6 +1,3 @@
 {
-    "cSpell.words": [
-        "fabs",
-        "numpy"
-    ]
+    "python.linting.pylintArgs": ["--init-hook"]
 }
