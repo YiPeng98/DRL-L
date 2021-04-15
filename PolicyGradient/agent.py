@@ -32,7 +32,7 @@ class PolicyGradient:
                 running_add = running_add * self.gamma + reward_pool[i]
                 reward_pool[i] = running_add # 此处对于缓冲池进行了再利用，从原来存储每一步的reward值变为了存储当前step的return
 
-        ''' 标准化奖励，使之为正太分布，是训练技巧，算法中并未提及'''
+        ''' 标准化奖励,随着训练次数的增加，奖励值会越来越大，因此需要对其进行标准化'''
         reward_mean = np.mean(reward_pool)
         reward_std = np.std(reward_pool)
         for i in range(len(reward_pool)):
@@ -52,7 +52,7 @@ class PolicyGradient:
             s = m.log_prob(action)
             loss = -m.log_prob(action) * reward  # 在此处就是根据传入的动作值选择相应概率进行自然对数的计算
             loss.backward()
-        self.optimizer.step()
+        self.optimizer.step() # 梯度累加到一定程度之后进行网络参数的更新
 
     def save_model(self, path):
         torch.save(self.policy_net.state_dict(), path+'pg_checkpoint.pt')
