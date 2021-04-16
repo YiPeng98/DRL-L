@@ -6,6 +6,7 @@ sys.path.append(os.getcwd()) # os.getcwd()获取当前路径
 from itertools import count
 import datetime
 import gym
+import torch
 from PolicyGradient.agent import PolicyGradient
 
 from common.plot import plot_rewards
@@ -25,6 +26,8 @@ if not os.path.exists(os.path.split(os.path.abspath(__file__))[0] + "/results/")
 if not os.path.exists(RESULT_PATH):
     os.mkdir(RESULT_PATH)
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 class PGConfig:
     def __init__(self):
         self.gamma = 0.99
@@ -43,6 +46,7 @@ def train(cfg, env, agent):
     ma_rewards = []
     for i_episode in range(cfg.train_eps): # 外循环：游戏的回合数
         state = env.reset()
+        state = torch.from_numpy(state).to(device)
         ep_reward = 0
         while True: # 内循环：一个回合内游戏的进行
             action = agent.choose_action(state)
@@ -53,7 +57,7 @@ def train(cfg, env, agent):
             state_pool.append(state)
             action_pool.append(action)
             reward_pool.append(reward)
-            state = next_state
+            state = torch.from_numpy(next_state).to(device)
             if done:
                 print('Episode:', i_episode, 'Reward:', ep_reward)
                 break
@@ -68,7 +72,7 @@ def train(cfg, env, agent):
     return rewards, ma_rewards
 
 def eval(cfg, env, agent):
-    agent.load_model(SAVED_MODEL_PATH)
+    agent.load_model(SAVED_MODEL_PATH) # 测试的时候只需要加载训练好的模型就可以
     '''存储每个episode的reward用于绘图'''
     rewards = [] 
     ma_rewards = []
@@ -103,8 +107,8 @@ if __name__ == '__main__':
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
     cfg = PGConfig()
-    agent = PolicyGradient(state_dim, cfg)
-    rewards, ma_rewards = eval(cfg, env, agent)
+    agent = PolicyGradient(state_dim, cfg, device)
+    # rewards, ma_rewards = eval(cfg, env, agent)
     rewards, ma_rewards = train(cfg, env, agent)
     agent.save_model(SAVED_MODEL_PATH)
     save_results(rewards, ma_rewards, tag='train', path=RESULT_PATH)
