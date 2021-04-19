@@ -21,7 +21,7 @@ class PolicyGradient:
         probs = self.policy_net(state.float())
         m = Bernoulli(probs) # 创建参数化的伯努利分布：以probs的概率选择1，1-probs的概率选择0
         action = m.sample() # 通过伯努利分布采样动作
-        action = action.cpu().data.numpy().astype(int)[0] # 将tensor转换为numpy时需要先转换到copu上
+        action = action.cpu().data.numpy().astype(int)[0] # 将tensor转换为numpy时需要先转换到cpu上
         return action
 
     def update(self, reward_pool, state_pool, action_pool):
@@ -51,9 +51,9 @@ class PolicyGradient:
             # state = Variable(torch.from_numpy(state).float()) 兼容GPU版本的就不需要了
             probs = self.policy_net(state)
             m = Bernoulli(probs)
-            loss = -m.log_prob(action) * reward  # 在此处就是根据传入的动作值选择相应概率进行自然对数的计算
+            loss = -m.log_prob(action) * reward  # 在此处就是根据传入的动作值选择相应概率进行自然对数的计算，目标函数loss
             loss.backward()
-        self.optimizer.step() # 梯度累加到一定程度之后进行网络参数的更新
+        self.optimizer.step() # 梯度累加到一定程度之后进行网络参数的更新，可以理解为一个批数据的梯度得到后再进行更新
 
     def save_model(self, path):
         torch.save(self.policy_net.state_dict(), path+'pg_checkpoint.pt')

@@ -14,7 +14,7 @@ from common.utils import save_results
 
 SEQUENCE = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") # 获取当前时间
 
-SAVED_MODEL_PATH = os.path.split(os    .path.abspath(__file__))[0] + "/saved_model/" + '/' # 保存模型的路径
+SAVED_MODEL_PATH = os.path.split(os.path.abspath(__file__))[0] + "/saved_model/" + '/' # 保存模型的路径
 if not os.path.exists(os.path.split(os.path.abspath(__file__))[0] + "/saved_model/"):
     os.mkdir(os.path.split(os.path.abspath(__file__))[0] + "/saved_model/" )
 if not os.path.exists(SAVED_MODEL_PATH):
