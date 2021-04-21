@@ -76,7 +76,7 @@ class PPO:
 
                 # 产生当前critic下的价值，并计算critic_loss
                 critic_value = self.critic(states) # 计算出当前critic的价值
-                returns = advantage[batch] + values[batch] # 旧的价值，此处为什么还要加上value[batch]呢
+                returns = advantage[batch] + values[batch] # 按照dueling q-learning中优势函数加上状态价值函数得到动作价值函数Q
                 critic_loss = (returns - critic_value) ** 2
                 critic_loss = critic_loss.mean()
                 total_loss = actor_loss + 0.5 * critic_loss
