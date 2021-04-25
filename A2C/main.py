@@ -1,96 +1,120 @@
+#!/usr/bin/env python
 # coding=utf-8
-
-import os,sys
+'''
+@Author: John
+@Email: johnjim0816@gmail.com
+@Date: 2020-06-11 20:58:21
+@LastEditor: John
+LastEditTime: 2021-04-05 11:14:39
+@Discription: 
+@Environment: python 3.7.9
+'''
+import sys,os
 curr_path = os.path.dirname(__file__)
-parent_path = os.path.dirname(curr_path)
-sys.path.append(parent_path)
+parent_path=os.path.dirname(curr_path) 
+sys.path.append(parent_path) # add current terminal path to sys.path
 
 import torch
 import gym
 import datetime
-from common.utils import save_results, mk_dir, del_empty_dir
+from A2C.agent import A2C
+from common.utils import save_results,mk_dir,del_empty_dir
 from common.plot import plot_rewards
-from agent import A2C
 
-# 创建相关文件夹
+
+
 SEQUENCE = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") # 获取当前时间
-SAVED_MODEL_PATH = curr_path + '/save_model/'
-RESULT_PATH = curr_path + '/results/' + SEQUENCE + '/'
-# 推荐使用以下创建目录的方式
-mk_dir(SAVED_MODEL_PATH, RESULT_PATH)
-del_empty_dir(RESULT_PATH)
+SAVED_MODEL_PATH = os.path.split(os.path.abspath(__file__))[0]+"/saved_model/"+SEQUENCE+'/' # 生成保存的模型路径
+if not os.path.exists(os.path.split(os.path.abspath(__file__))[0]+"/saved_model/"): 
+    os.mkdir(os.path.split(os.path.abspath(__file__))[0]+"/saved_model/")
+if not os.path.exists(SAVED_MODEL_PATH): 
+    os.mkdir(SAVED_MODEL_PATH)
+RESULT_PATH = os.path.split(os.path.abspath(__file__))[0]+"/results/"+SEQUENCE+'/' # 存储reward的路径
+if not os.path.exists(os.path.split(os.path.abspath(__file__))[0]+"/results/"): 
+    os.mkdir(os.path.split(os.path.abspath(__file__))[0]+"/results/")
+if not os.path.exists(RESULT_PATH): 
+    os.mkdir(RESULT_PATH)
+del_empty_dir(RESULT_PATH, SAVED_MODEL_PATH)
 
 class A2CConfig:
     def __init__(self):
-        self.env = 'CartPole-v0'
-        self.algo = 'A2C'
         self.gamma = 0.99
-        self.lr = 3e-4
+        self.lr = 3e-4 # learnning rate
+        self.actor_lr = 1e-4 # learnning rate of actor network
+        self.memory_capacity = 10000 # capacity of replay memory
+        self.batch_size = 128
         self.train_eps = 200
         self.train_steps = 200
-        self.hidden_dim = 256
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model_path = SAVED_MODEL_PATH
-
-def train(cfg, env, agent):
-    print('Start to train!')
-    rewards = []
+        self.eval_eps = 200
+        self.eval_steps = 200
+        self.target_update = 4
+        self.hidden_dim=256
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.algo = 'A2C'
+    
+def train(cfg,env,agent):
+    print('Start to train ! ')
+    ep_rewards = []
     ma_rewards = []
-    # 首先判断是否已经有模型存在，存在就加载上去
-    if os.listdir(cfg.model_path):
-        agent.load(SAVED_MODEL_PATH)
     for i_episode in range(cfg.train_eps):
-        #  定义每一回合内部用到的变量
-        done = False
         state = env.reset()
-        ep_step = 0
-        entropy = 0
-        values = []
-        next_values = []
         log_probs = []
-        step_rewards = []
-        mask_dones = []
-        while not done: # 先产生一回合的数据
-            action, value, dist = agent.choose_action(state)
-            # 得到与环境互动一步后的数据
-            next_state, reward, done, _ = env.step(action) # 没有往经验池中存储数据
-            # 将相关数据添加到指定列表
-            _, next_value, _ = agent.choose_action(next_state)
-            log_prob = dist.log_prob(torch.tensor(action).to(cfg.device))
-
-            log_probs.append(log_prob)
-            values.append(value)
-            next_values.append(next_value)
-            step_rewards.append(torch.FloatTensor([reward]).to(cfg.device))
-            mask_dones.append(torch.FloatTensor(1 - done).unsqueeze(1).to(cfg.device))
-
-            ep_step += 1
+        values    = []
+        rewards = []
+        masks     = []
+        entropy = 0
+        ep_reward = 0
+        for i_step in range(cfg.train_steps):
+            state = torch.FloatTensor(state).to(cfg.device)
+            dist, value = agent.model(state)
+            action = dist.sample()
+            next_state, reward, done, _ = env.step(action.cpu().numpy())
+            ep_reward+=reward
+            state = next_state                                                  
+            log_prob = dist.log_prob(action)
             entropy += dist.entropy().mean()
-            state = next_state
-        mask_dones[-1] = torch.FloatTensor([0.0]).unsqueeze(1).to(cfg.device)
-        ep_reward = sum(step_rewards)
-        print('Episode:{}/{}, Reward:{}, Steps:{}'.format(i_episode+1, cfg.train_eps, ep_reward.item(), ep_step))
-        # 利用一回合的数据进行更新
-        agent.update(values, next_values, step_rewards, log_probs, mask_dones, entropy)
+            log_probs.append(log_prob.unsqueeze(0))
+            values.append(value)
+            rewards.append(torch.FloatTensor([reward]).unsqueeze(1).to(cfg.device))
+            masks.append(torch.FloatTensor(1 - done).unsqueeze(1).to(cfg.device))
+            if done:
+                break
+        
+        print('Episode:{}/{}, Reward:{}, Steps:{}, Done:{}'.format(i_episode+1,cfg.train_eps,ep_reward,i_step+1,done))
+        next_state = torch.FloatTensor(next_state).to(cfg.device)
+        _, next_value =agent.model(next_state)
+        returns = agent.compute_returns(next_value, rewards, masks)
+
+        log_probs = torch.cat(log_probs)
+        returns   = torch.cat(returns).detach()
+        values    = torch.cat(values)
+        advantage = returns - values
+        actor_loss  = -(log_probs * advantage.detach()).mean()
+        critic_loss = advantage.pow(2).mean()
+        loss = actor_loss + 0.5 * critic_loss - 0.001 * entropy
+        
+        agent.optimizer.zero_grad()
+        loss.backward()
+        agent.optimizer.step()
         rewards.append(ep_reward)
         if ma_rewards:
             ma_rewards.append(
                 0.9*ma_rewards[-1]+0.1*ep_reward)
         else:
             ma_rewards.append(ep_reward)
-    # 保存训练好的模型
-    print('Complete one_eps training!')
-    agent.save(SAVED_MODEL_PATH)
+    
+    print('Complete training！')
     return rewards, ma_rewards
 
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     cfg = A2CConfig()
-    env = gym.make(cfg.env)
-    env.seed(1)
+    env = gym.make('CartPole-v0')
+    env.seed(1) # set random seed for env
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
     agent = A2C(state_dim, action_dim, cfg)
-    rewards, ma_rewards =  train(cfg, env, agent)
+    rewards, ma_rewards =  train(cfg,env,agent)
     save_results(rewards, ma_rewards, tag='train', path=RESULT_PATH)
     plot_rewards(rewards, ma_rewards, tag="train", algo = cfg.algo, path=RESULT_PATH)
