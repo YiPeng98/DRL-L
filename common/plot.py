@@ -14,4 +14,12 @@ def plot_rewards(rewards, ma_rewards, tag="train", algo="DQN", save=True, path='
         plt.savefig(path+"rewards_curve_{}".format(tag))
     plt.show() # 显示已经画好的图
 
-# def plot_losses(losses, algo="DQN", save=True, path='./'):
+def plot_losses(losses, algo="DQN", save=True, path='./'):
+    sns.set()
+    plt.title("loss curve of {}".format(algo))
+    plt.xlabel('episodes')
+    plt.plot(losses, label='losses')
+    plt.legend()
+    if save:
+        plt.savefig(path+'losses_curve')
+    plt.show()
